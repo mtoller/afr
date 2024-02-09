@@ -23,9 +23,6 @@ optimTarget <- function(a,b,mu,sigma2,p,P_mean,w){
 }
 
 omega <- function(s_x,s_x2,s_B,n,mu,sigma2s,a,b,info=FALSE){
-  # if (abs(mu-(a+b)/2)<1e-8){
-  #   warning("mu is close to (a+b)/2. Numeric instability is expected.")
-  # }
   if (s_x/(n-s_B) == (a+b)/2){
     stop("There is no constrained solution for s_x/(n-s_B)=(a+b)/2. Try different labels")
   }
@@ -70,12 +67,9 @@ omega <- function(s_x,s_x2,s_B,n,mu,sigma2s,a,b,info=FALSE){
   diff[which(!is.finite(diff))] <- Inf
   
   if (all(diff > 1e-6)){
-    # warning("omega_mu - omega_s do not match. Did you really pass the MLE sigma2?")
     return(list(omega=NaN,sigma2=0))
   }
   else if(sum(diff <= 1e-6) > 1){
-    # print(paste0("omega_mu=",omega_mu))
-    # print(paste0("omega_s=",omega_s))
     warning("More than one omega_mu - omega_s match. Taking smaller one.")
   }
   
@@ -111,7 +105,6 @@ getParams <- function(mu,s_x,s_x2,s_B,x_bar,x2_bar,n,a,b,info=FALSE){
   sigma2s <- theLambertSolutionsC(x2_bar,x_bar,mu,a,b)
 
   if (all(!is.finite(sigma2s))){
-    # stop("Not in the correct region of r")
     return(list(mu=mu,sigma2=0,p=NaN))
   }
   if (all((sigma2s[which(is.finite(sigma2s))]) <= 0)){
@@ -123,7 +116,6 @@ getParams <- function(mu,s_x,s_x2,s_B,x_bar,x2_bar,n,a,b,info=FALSE){
   
   p <- s_B/(n-res$omega)
   if (sigma2 == 0){
-    # warning("Numeric instability encountered during optimization.")
     return(list(mu=mu,sigma2=0,p=NaN))
   }
   
@@ -131,7 +123,6 @@ getParams <- function(mu,s_x,s_x2,s_B,x_bar,x2_bar,n,a,b,info=FALSE){
     stop("p is not finite. This should never happen.")
   }
   if (p < 0 || p > 1){
-    # warning("Resulting p is not in range [0;1].")
     return(list(mu=mu,sigma2=NaN,p=NaN))
     
   }
@@ -221,8 +212,6 @@ paramOptimization <- function(s_x,s_x2,s_B,x_bar,x2_bar,n,a,b,P_mean,w,n_optim_s
     lower <- mid + 1e-7
     upper <- mid + abs(x_bar)*2
   }
-  #lower <- mid-abs(x_bar)*3.5#-abs(x_bar)*0.1 #(x2_bar-b*x_bar)/(x_bar-b)+1e-6
-  #upper <- mid+abs(x_bar)*3.5#abs(x_bar)*0.1#(x2_bar-a*x_bar)/(x_bar-a)-1e-6
   mus <- seq(lower,upper,length=n_optim_steps)
   
   errors <- rep(NaN,n_optim_steps)
@@ -259,16 +248,10 @@ paramOptimization <- function(s_x,s_x2,s_B,x_bar,x2_bar,n,a,b,P_mean,w,n_optim_s
   polygon(x=c(mus[w_p[1]],mus[w_p[length(w_p)]],rev(mus[w_p])),y=c(errors[w_p[1]],errors[w_p[length(w_p)]],rev(errors[w_p])),
           col = rgb(0.8,0.5,0.6,0.4),border = rgb(0.1,0.1,0.1,0.2))
   
-  # dev.new()
-  # plot(mus,likss,type='l')
-  # points(x_bar,logLikelihood(n,s_x,s_x2,s_B,x_bar,1/(n-s_B)*(s_x2+(n-s_B)*x_bar^2-2*x_bar*s_x),s_B/n),pch=4,col='orange',lwd=3)
- 
-  # invisible(list(errors=errors,likelihoods=liks))
   return(candidate_params[[which.max(liks)]])
 }
 
 emAfr <- function(x,a=NULL,b=NULL,alpha=0.05,return_scores=TRUE,ignore_AFR=FALSE,epsilon=1e-8){
-  # x <- abScale(x) #scaling has no effect other than increasing numerical stability
   
   if (length(unique(x))<=2){
     warning("anomaly detection on data with less than 3 unique values is meaningless. Returning scaled input")

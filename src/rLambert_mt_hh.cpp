@@ -4,8 +4,6 @@
 #include <vector>
 #include <stdio.h>
 #include <float.h>
-// #include <gmpxx.h>
-// #include <Rcpp.h>
 std::vector<double> result(3);
 
 // [[Rcpp::export]]
@@ -45,8 +43,6 @@ double LambertW0(const double z) {
     w-=t;
     if (fabs(t)<eps*(1.0+fabs(w))) return w; /* rel-abs error */
   }
-  /* should never get here */
-  //fprintf(stderr,"LambertW: No convergence at z=%g, exiting.\n",z); 
   return 0;
 }
 // [[Rcpp::export]]
@@ -77,7 +73,6 @@ double LambertW1(const double z) {
     if (fabs(t)<eps*(1.0+fabs(w))) return w; /* rel-abs error */
   }
   /* should never get here */
-  //fprintf(stderr,"LambertW1: No convergence at z=%g, exiting.\n",z);
   return 0;
 }
 
@@ -120,21 +115,18 @@ std::vector<double> rLambert(const double x, const double r){
   }
   
   if (r == 0.){
-    // printf("Case0\n");
     result[1] = LambertW1(x);
     result[2] = LambertW0(x);
     return result;
   }
   
   if (r >= em2){ //Case 1 & Case2 are the same
-    // printf("Case1\n");
     double a = DBL_MIN / 2.;
     double b = DBL_MAX / 2.;
     if (x > 0.) a = 0; else b = 0;
     result[2] = bs(a,b,x,r,true);
   }
   else if (r > 0 && r < em2){ //Case 3
-    // printf("Case3\n");
     double alpha = LambertW1(-r*e) - 1;
     double beta = LambertW0(-r*e) - 1;
     
@@ -157,12 +149,9 @@ std::vector<double> rLambert(const double x, const double r){
     }
   }
   else if (r < 0){ // Case 4
-    // printf("Case4\n");
     double gamma = LambertW0(-r*e) - 1;
     double f_gamma = f(gamma,r);
     
-    // printf("gamma=%.*e\n",DECIMAL_DIG,gamma);
-    // printf("f_gamma=%.*e\n",DECIMAL_DIG,f_gamma);
     if (x >= f_gamma){
       result[1] = bs(-DBL_MAX / 2., gamma,x,r,false);
       result[2] = bs(gamma,DBL_MAX / 2.,x,r,true);
@@ -188,27 +177,12 @@ std::vector<double> theLambertSolutionsC(const double x2_bar, const double x_bar
     return result2;
   }
   
-  double m;// = 0.5 * (pow(a-mu,2) - pow(b-mu,2));
+  double m;
   m = fma(a-b,(a+b)/2.,(b-a)*mu);
   double r = -alpha / beta;
   double e_power = exp(-m/beta);
-  // double inp = m * ((alpha - beta)/pow(beta,2)) * e_power;
   double inp = m * ((alpha - beta)/pow(beta,2)) * e_power;
 
-  // printf("mu=%f\n",mu);
-  // printf("x_bar=%f\n",x_bar);
-  // printf("x2_bar=%f\n",x2_bar);
-  // printf("a=%f\n",a);
-  // printf("b=%f\n",b);
-  // printf("alpha=%f\n",alpha);
-  // printf("beta=%.*e\n",DECIMAL_DIG,beta);
-  // printf("-alpha/beta=%.*e\n",DECIMAL_DIG,-alpha/beta);
-  // printf("(alpha-beta)/beta^2=%.*e\n",DECIMAL_DIG,(alpha-beta)/pow(beta,2));
-  // printf("-m/beta=%.*e\n",DECIMAL_DIG,-m/beta);
-  // printf("m=%.*e\n",DECIMAL_DIG,m);
-  // printf("inp=%.*e\n",DECIMAL_DIG,inp);
-  // printf("e_power=%.*e\n",DECIMAL_DIG,e_power);
-  // printf("r*e_power=%.*e\n",DECIMAL_DIG,r*e_power);
 
   std::vector<double> lamb = rLambert(inp,r*e_power);
   
@@ -216,18 +190,12 @@ std::vector<double> theLambertSolutionsC(const double x2_bar, const double x_bar
   int i;
   
   for (i=0;i<=2;i++){
-    // printf("lamb[i]=%f\n",lamb[i]);
-    // printf("lamb[i]=%.*e\n",DECIMAL_DIG,lamb[i]);
     if (isnan(lamb[i])){
       result2[i] = NAN;
     }
     else{
       d = fma(lamb[i],beta,m);
-      // printf("beta=%.*e\n",DECIMAL_DIG,beta);
-      // printf("m=%.*e\n",DECIMAL_DIG,m);
-      // printf("d=%.*e\n",DECIMAL_DIG,d);
       result2[i] = beta * m / d;
-      // printf("sigma2[i]=%f\n",result2[i]);
     }
   }
   

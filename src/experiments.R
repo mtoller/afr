@@ -64,31 +64,6 @@ rocAUC <- function(scores,actual){
   ROCit::rocit(scores,actual)$AUC
 }
 
-simulateGaussUniAnomaly <- function(n,p,mu,sigma2,a,b,uni_min,uni_max){
-  B <- as.logical(rbinom(n,1,p))
-  s_B <- sum(B)
-  
-  data_n <- rnorm(n-s_B,mu,sqrt(sigma2))
-  data_inf <- c()
-  
-  while (length(data_inf) < s_B){
-    anomaly <- runif(1,uni_min,uni_max)
-    if (anomaly < a | anomaly > b){
-      data_inf <- c(data_inf,anomaly)
-    }
-  }
-  
-  
-  x <- c(data_inf,data_n)
-  
-  P <- (1-p)*(1-(pnorm(b,mu,sqrt(sigma2))-pnorm(a,mu,sqrt(sigma2)))) + p
-  
-  
-  ordering <- sample(1:n,n)
-  B <- ordering %in% (1:length(data_inf))
-  
-  return(list(x=x[ordering],B=B,P=P))
-}
 
 benchmarkExperiment <- function(seed=0){
   
@@ -96,16 +71,7 @@ benchmarkExperiment <- function(seed=0){
   set.seed(seed)
   
   
-  # detectors <- list(LOF=lof,
-  #                   SVDD=ocsvm,
-  #                   IForest=iforest,
-  #                   DeepSVDD=deepSvdd,
-  #                   COPOD=copod,
-  #                   ours=thePCAOne)
-  #detectors <- list(COPOD=copod,IForest=iforest,ours=thePCAOne,ours_copula=theCopulaOne,
-                    # ours_simple=thePCAOneSimple,benchGauss=benchGauss,
-                    # ours_simple_copula=theSimpleCopulaOne,benchGaussCop=benchGaussCopula)
-                    # ours_geiger=theGeigerCopulaOne)
+  
   detectors <- list(LOF=lof,
                     IForest=iforest,
                     COPOD=copod,
@@ -143,10 +109,7 @@ benchmarkExperiment <- function(seed=0){
   colnames(times_table) <- names(detectors)
   
   for (j in 1:length(datasets)){
-    # print(j)
-    # if (!(j %in% c(2:4,10,19,26:29))){
-    #   next
-    # }
+   
     
     
     x <- datasets[[j]]$X
@@ -155,9 +118,6 @@ benchmarkExperiment <- function(seed=0){
     sam <- sample(1:nrow(x),nrow(x))
     x <- x[sam,]
     
-    
-    # x <- apply(x,2,scale)
-    # x <- pcaPP::PCAproj(x)$scores[,1]
     
     B_true <- datasets[[j]]$y[sam]
     
@@ -201,174 +161,9 @@ benchmarkExperiment <- function(seed=0){
   return(list(results=result_table,times=times_table))
 }
 
-semiBenchmarkExperiment <- function(seed=0){
-  set.seed(seed)
-  
-  
-  # detectors <- list(LOF=lof,
-  #                   SVDD=ocsvm,
-  #                   IForest=iforest,
-  #                   DeepSVDD=deepSvdd,
-  #                   COPOD=copod,
-  #                   ours=thePCAOne)
-  #detectors <- list(COPOD=copod,IForest=iforest,ours=thePCAOne,ours_copula=theCopulaOne,
-  # ours_simple=thePCAOneSimple,benchGauss=benchGauss,
-  # ours_simple_copula=theSimpleCopulaOne,benchGaussCop=benchGaussCopula)
-  # ours_geiger=theGeigerCopulaOne)
-  
-  detectors <- list(prenet=prenet)#,overlap=overlap)
-  
-  measures <- list(rocAUC=rocAUC)
-  
-  datasets <- list()
-  
-  
-  for (filename in dir("../datasets/")){
-    datasets[[length(datasets)+1]] <- processNPZ(paste0("../datasets/",filename))
-  }
-  
-  datasets <- datasets[c(2:4,10,19,26:29)]
-  result_table <- matrix(NA,length(datasets),length(detectors)*length(measures))
-  colnames(result_table) <- rep(names(detectors),length(measures))
-  
-  times_table <- matrix(Inf,length(datasets),length(detectors))
-  colnames(times_table) <- names(detectors)
-  
-  for (j in 1:length(datasets)){
-    
-    x <- datasets[[j]]$X
-    #shuffle dataset indices to avoid trivial solutions
-    set.seed(seed)
-    sam <- sample(1:nrow(x),nrow(x))
-    x <- x[sam,]
-    
-    B_true <- datasets[[j]]$y[sam]
-    
-    #train test split
-    splitted <- makeSplit(x,B_true,training_proportion = 0.05)
-    X_train <- splitted$X_train
-    y_train <- splitted$y_train
-    X_test <- splitted$X_test
-    y_test <- splitted$y_test
-    
-    Bs <- list()
-    for (i in 1:length(detectors)){
-      set.seed(seed)
-      print(paste0("Computing ",names(detectors)[i],"..."))
-      tryCatch(
-        {
-          t_before <- as.numeric(Sys.time())  
-          Bs[[i]] <- detectors[[i]](X_train,y_train,X_test)
-          t_after <- as.numeric(Sys.time())
-          },
-        error=function(cond){
-          print(paste0("error: ",cond))
-          Bs[[i]] <<- rep(0,length(y_test))
-        }
-      )
-      for (t in 1:length(measures)){
-        result_table[j,i+length(detectors)*(t-1)] <- measures[[t]](Bs[[i]],y_test)
-      }
-      times_table[j,i] <- t_after-t_before
-      
-    }
-    print(result_table)
-    print(colMeans(result_table,na.rm = TRUE))
-    
-  }
-  
-  # final_result_table <- matrix(NA,nrow = length(measures),ncol = length(detectors))
-  # colnames(final_result_table) <- names(detectors)
-  # 
-  # for (j in 1:length(measures)){
-  #   final_result_table[j,] <- colMeans(result_table[,(1:length(detectors))
-  #                                                   +length(detectors)*(j-1)])
-  #   
-  # }
-  
-  #print(rowMeans(apply(result_table,1,function(r)rank(-r,TRUE,"last"))))
-  
-  print(times_table)
-  return(list(results=result_table,times=times_table))
-}
 
-officeExperiment <- function(seed=0){
-  
-  
-  
-  detectors <- list(LOF=lof,
-                    SVDD=ocsvm,
-                    # SVDD_PU=ocsvmPu,
-                    IForest=iforest,
-                    DeepSVDD=deepSvdd,
-                    # DeepSVDD_Pu=deepSvddPu,
-                    COPOD=copod,
-                    EM=function(x,...)emAfr(x,...,ignore_AFR = TRUE),
-                    ours=emAfr,
-                    random=function(X,...)randomAfr(X,ignore_AFR=TRUE,...),randomAfr=randomAfr)
-  
-  measures <- list(rocAUC=rocAUC)
-  
-  result_table <- matrix(NA,1,length(detectors)*2*length(measures))
-  colnames(result_table) <- rep(names(detectors),length(measures)*2)
-  
-  times_table <- matrix(Inf,1,length(detectors))
-  colnames(times_table) <- names(detectors)
-  
-  for (j in 1:1){
-    print(j)
-    
-    
-    
-    office <- read.csv("../our_datasets/office.csv")
-    
-    x <- office$time_deviation
-    B_true <- office$is_anomaly==1
-    a <- -29
-    b <- 29
-    true_a_prop <- sum(B_true)
-    wBninR <- which(x < a | x > b)
-    
-    Bs <- list()
-    for (i in 1:length(detectors)){
-      set.seed(seed)
-      print(paste0("Computing ",names(detectors)[i],"..."))
-      t_before <- as.numeric(Sys.time())
-      Bs[[i]] <- detectors[[i]](as.matrix(x),a=a,b=b)
-      t_after <- as.numeric(Sys.time())
-      
-      for (t in 1:length(measures)){
-        result_table[j,i+length(detectors)*(t-1)*2] <- measures[[t]](Bs[[i]],B_true)
-        result_table[j,i+length(detectors)*(t*2-1)] <- measures[[t]](Bs[[i]][wBninR],B_true[wBninR])
-      }
-      times_table[j,i] <- t_after-t_before
-      
-    }
-    
-    
-    
-  }
-  
-  final_result_table <- matrix(NA,nrow = length(measures)*2,ncol = length(detectors))
-  colnames(final_result_table) <- names(detectors)
-  
-  for (j in 1:length(measures)){
-    final_result_table[2*(j-1)+1,] <- result_table[,(1:length(detectors))
-                                                   +length(detectors)*(j-1)*2]
-    final_result_table[2*j,] <- result_table[,(1:length(detectors))
-                                             +length(detectors)*(j*2-1)]
-    
-  }
-  
-  row.names(final_result_table) <- unlist(lapply(names(measures),function(nam){
-    c(nam,paste0(nam," outside R"))
-  }))
-  print(times_table)
-  return(final_result_table)
-}
 
-officeExperimentNew <- function(){
-  set.seed(0)
+officeExperiment <- function(){
   office <- read.csv("../our_datasets/office.csv")
   
   x <- office$time_deviation
@@ -378,8 +173,11 @@ officeExperimentNew <- function(){
   a <- -29
   b <- 29
   
+  set.seed(0)
   split10 <- makeSplit(X,y,0.1)
+  set.seed(0)
   split20 <- makeSplit(X,y,0.2)
+  set.seed(0)
   split50 <- makeSplit(X,y,0.5)
   
   result_table <- matrix(NA,1,7)
@@ -401,85 +199,8 @@ officeExperimentNew <- function(){
   return(result_table)
 }
 
-simulationExperiment <- function(n_sims=100,seed=0){
-  
-  set.seed(seed)
-  
-  detectors <- list(LOF=lof,
-                    SVDD=ocsvm,
-                    # SVDD_PU=ocsvmPu,
-                    IForest=iforest,
-                    DeepSVDD=deepSvdd,
-                    # DeepSVDD_Pu=deepSvddPu,
-                    COPOD=copod,
-                    EM=function(x,...)emAfr(x,...,ignore_AFR = TRUE),
-                    ours=emAfr,
-                    random=function(X,...)randomAfr(X,ignore_AFR=TRUE,...),randomAfr=randomAfr)
-  
-  measures <- list(rocAUC=rocAUC)
-  
-  result_table <- matrix(NA,n_sims,length(detectors)*2*length(measures))
-  colnames(result_table) <- rep(names(detectors),length(measures)*2)
-  
-  for (j in 1:n_sims){
-    print(j)
-    
-    
-    
-    p <- runif(1,0.005,0.02)
-    mu <- runif(1,-5,5)
-    sigma2 <- runif(1,0.01,2)
-    fact <- runif(1,0.01,3)
-    a <- mu-fact*sqrt(sigma2)
-    b <- mu+fact*sqrt(sigma2)
-    
-    sim <- simulateGaussUniAnomaly(1000,p,mu,sigma2,a,b,
-                                   uni_min = mu-10*sqrt(sigma2),
-                                   uni_max = mu+10*sqrt(sigma2))
-    
-    x <- sim$x
-    B_true <- sim$B
-    P <- sim$P
-    
-    wBninR <- which(x < a | x > b)
-    
-    Bs <- list()
-    for (i in 1:length(detectors)){
-      print(paste0("Computing ",names(detectors)[i],"..."))
-      Bs[[i]] <- detectors[[i]](as.matrix(x),a=a,b=b)
-      
-      for (t in 1:length(measures)){
-        result_table[j,i+length(detectors)*(t-1)*2] <- measures[[t]](Bs[[i]],B_true)
-        result_table[j,i+length(detectors)*(t*2-1)] <- measures[[t]](Bs[[i]][wBninR],B_true[wBninR])
-      }
-      
-      
-    }
-    
-    
-    
-  }
-  
-  final_result_table <- matrix(NA,nrow = length(measures)*2,ncol = length(detectors))
-  colnames(final_result_table) <- names(detectors)
-  
-  for (j in 1:length(measures)){
-    final_result_table[2*(j-1)+1,] <- colMeans(result_table[,(1:length(detectors))
-                                                            +length(detectors)*(j-1)*2])
-    final_result_table[2*j,] <- colMeans(result_table[,(1:length(detectors))
-                                                      +length(detectors)*(j*2-1)])
-    
-  }
-  
-  row.names(final_result_table) <- unlist(lapply(names(measures),function(nam){
-    c(nam,paste0(nam," outside R"))
-  }))
-  print(colMeans(result_table))
-  print(apply(result_table,2,sd))
-  return(final_result_table)
-}
 
-trueSimulationExperiment <- function(n_params=10,n_samples=10,n_data=1000,n_B=10,seed=0){
+simulationExperiment <- function(n_params=10,n_samples=10,n_data=1000,n_B=10,seed=0){
   set.seed(seed)
   mus <- runif(n_params,-5,5)
   sigmas <- runif(n_params,0.1,2)
@@ -531,17 +252,9 @@ trueSimulationExperiment <- function(n_params=10,n_samples=10,n_data=1000,n_B=10
       p_mle <- s_B/n
       
       constrained_params <- paramOptimizationBinary(s_x,s_x2,s_B,x_bar,x2_bar,n,a,b,P_mean,w,1e-8)
-      # paramOptimization(s_x,s_x2,s_B,x_bar,x2_bar,n,a,b,P_mean,w)
-      # invisible(readline(prompt="Press [enter] to continue"))
       mu_c <- constrained_params$mu
       sigma2_c <- constrained_params$sigma2
       p_c <- constrained_params$p
-      # 
-      # dldmu <- (s_x - (n-s_B)*mu)/sigma2
-      # dIdmu <- (exp(-(a-mu)^2/(2*sigma2))-exp(-(b-mu)^2/(2*sigma2)))/(sqrt(2*pi)*sqrt(sigma2))
-      # I <- pnorm(b,mu,sqrt(sigma2))-pnorm(a,mu,sqrt(sigma2))
-      # 
-      # omega <- dldmu/dIdmu*I
       
       mu_mle_B <- 0
       sigma2_mle_B <- 0
@@ -594,12 +307,6 @@ trueSimulationExperiment <- function(n_params=10,n_samples=10,n_data=1000,n_B=10
       results[position,14] <- p_c
       results[position,15] <- p_c_B/n_B
       
-      # if (position == 45){
-      #   plot(x)
-      #   points(which(B),x[which(B)],col='red',pch=4)
-      #   lines(c(-1000,1000),c(a,a),col='blue')
-      #   lines(c(-1000,1000),c(b,b),col='green')
-      # }
     }
   }
   results <- as.data.frame(results)
@@ -626,55 +333,7 @@ trueSimulationExperiment <- function(n_params=10,n_samples=10,n_data=1000,n_B=10
   return(list(table=results,summary=round(results_final,4)))
 }
 
-sensitivityExperiment <- function(n_sims=100,n_params=100,seed=0){
-  set.seed(seed)
-  
-  taus <- 10^seq(-1,-10,length.out=n_params)
-  
-  
-  
-  measures <- list(macroF1=macroF1)
-  
-  result_list <- rep(0,length(taus))
-  
-  for (j in 1:n_sims){
-    print(j)
-    
-    
-    
-    p <- runif(1,0.005,0.02)
-    mu <- runif(1,-5,5)
-    sigma2 <- runif(1,0.01,5)
-    fact <- runif(1,0.1,3)
-    a <- mu-fact*sqrt(sigma2)
-    b <- mu+fact*sqrt(sigma2)
-    
-    sim <- simulateGaussUniAnomaly(1000,p,mu,sigma2,a,b,
-                                   uni_min = mu-10*sqrt(sigma2),
-                                   uni_max = mu+10*sqrt(sigma2))
-    
-    x <- sim$x
-    B_true <- sim$B
-    P <- sim$P
-    
-    
-    for (i in 1:length(taus)){
-      tau <- taus[i]
-      print(paste0("tau=",tau))
-      
-      B <- theOne(x,a,b,flat_prior_const=tau,optim_stop = 1e+3)
-      result_list[i] <- result_list[i] + macroF1(B,B_true)
-    }
-    
-    
-    
-  }
-  plot(taus,result_list/n_sims,type='l',log='x',ylim=c(0,1))
-  
-  return(result_list/n_sims)
-  
-}
-sensitivityStudy <- function(filepath,n_AFR=11){
+sensitivityStudy <- function(filepath="../datasets/annthyroid.npz",n_AFR=11){
   dataset <- processNPZ(filepath)
   X <- dataset$X
   y <- dataset$y
