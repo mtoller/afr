@@ -1,6 +1,49 @@
 abScale <- function(x,a=0,b=1){
   a+(x-min(x))*(b-a)/(max(x)-min(x))
 }
+benchGauss <- function(x,...){
+  z <- c(pcaPP::PCAproj(x,k=1)$scores)
+  mu <- mean(z)
+  sigma2 <- mean((z-mu)^2)
+  
+  return(dnorm(mu,mu,sqrt(sigma2)) - dnorm(z,mu,sqrt(sigma2)))
+}
+benchGaussCopula <- function(X,...){
+  n <- nrow(X)
+  d <- ncol(X)
+  
+  skewness <- function(x){
+    m <- mean(x)
+    (1/(length(x))*sum((x-m)^3)) / (1/length(x)*sum((x-m)^2))^(3/2)
+  }
+  
+  U <- matrix(NA,n,d)
+  V <- matrix(NA,n,d)
+  W <- matrix(NA,n,d)
+  
+  for (j in 1:d){
+    x <- X[,j]
+    
+    mu <- mean(x)
+    sigma2 <- mean((x-mu)^2)
+    
+    U[,j] <- pnorm(x,mu,sqrt(sigma2),log.p = TRUE)
+    
+    V[,j] <- pnorm(-x,-mu,sqrt(sigma2),log.p = TRUE)
+    
+    if (skewness(x) < 0){
+      W[,j] <- U[,j]
+    }
+    else{
+      W[,j] <- V[,j]
+    }
+  }
+  pl <- apply(U,1,function(u)-sum(u))
+  pr <- apply(V,1,function(u)-sum(u))
+  ps <- apply(W,1,function(u)-sum(u))
+  
+  return(apply(cbind(pl,pr,ps),1,max))
+}
 song <- function(x,bw=3,tol=0.5,prop=0.1,...){
   
   m <- median(x)
@@ -108,74 +151,32 @@ uniGaussEmHard <- function(x,mu_0=mean(x),sigma2_0=var(x),p_0=0.5,factor=1,prop=
   return(B)
 }
 
-iforest <- function(x,prop,...){
-  inverted <- FALSE
-  if (prop > 0.5*nrow(x)){
-    prop <- nrow(x)-prop
-    inverted <- TRUE
-  }
+iforest <- function(x,...){
   iforest <- import("pyod.models.iforest")$IForest(n_estimators=as.integer(1000),
-                                                   random_state = as.integer(0),
-                                                   contamination = prop/nrow(x))
+                                                   random_state = as.integer(0))
   iforest$fit(x)
-  if (inverted){
-    return(!as.logical(iforest$labels_))
-  }
-  return(as.logical(iforest$labels_))
-  #return(1:nrow(x) %in% rev(order(iforest$decision_scores_))[1:prop])
-  # return(abScale(iforest$decision_scores_) > 0.5)
+  return(iforest$decision_scores_)
 }
 
-copod <- function(x,prop,...){
-  inverted <- FALSE
-  if (prop > 0.5*nrow(x)){
-    prop <- nrow(x)-prop
-    inverted <- TRUE
-  }
-  copod <- import("pyod.models.copod")$COPOD(contamination = prop/nrow(x))
+copod <- function(x,...){
+  copod <- import("pyod.models.copod")$COPOD()
   
   copod$fit(x)
-  if (inverted){
-    return(!as.logical(copod$labels_))
-  }
-  return(as.logical(copod$labels_))
-  #return(1:nrow(x) %in% rev(order(copod$decision_scores_))[1:prop])
-  # return(abScale(copod$decision_scores_) > 0.5)
+  return(copod$decision_scores_)
 }
 
-lof <- function(x,prop,...){
-  inverted <- FALSE
-  if (prop > 0.5*nrow(x)){
-    prop <- nrow(x)-prop
-    inverted <- TRUE
-  }
-  lof <- import("pyod.models.lof")$LOF(n_neighbors = as.integer(5),contamination = prop/nrow(x))
-  
+lof <- function(x,...){
+  lof <- import("pyod.models.lof")$LOF(n_neighbors = as.integer(5))
   lof$fit(x)
-  if (inverted){
-    return(!as.logical(lof$labels_))
-  }
-  return(as.logical(lof$labels_))
-  #return(1:nrow(x) %in% rev(order(lof$decision_scores_))[1:prop])
-  # return(abScale(lof$decision_scores_) > 0.5)
+  return(lof$decision_scores_)
 }
 
 
-ocsvm <- function(x,prop,...){
-  inverted <- FALSE
-  if (prop > 0.5*nrow(x)){
-    prop <- nrow(x)-prop
-    inverted <- TRUE
-  }
-  ocsvm <- import("pyod.models.ocsvm")$OCSVM(contamination = prop/nrow(x))
+ocsvm <- function(x,...){
+  ocsvm <- import("pyod.models.ocsvm")$OCSVM()
   
   ocsvm$fit(x)
-  if (inverted){
-    return(!as.logical(ocsvm$labels_))
-  }
-  return(as.logical(ocsvm$labels_))
-  # return(1:nrow(x) %in% rev(order(ocsvm$decision_scores_))[1:prop])
-  # return(abScale(ocsvm$decision_scores_) > 0.5)
+  return(ocsvm$decision_scores_)
 }
 ocsvmPu <- function(x,a,b,prop,...){
   ocsvm <- import("pyod.models.ocsvm")$OCSVM(contamination = prop/nrow(x))
@@ -195,20 +196,19 @@ ocsvmPu <- function(x,a,b,prop,...){
 }
 
 deepSvdd <- function(x,prop,...){
-  inverted <- FALSE
-  if (prop > 0.5*nrow(x)){
-    prop <- nrow(x)-prop
-    inverted <- TRUE
-  }
-  deep_svdd <- import("pyod.models.deep_svdd")$DeepSVDD(contamination = prop/nrow(x),
-    random_state = as.integer(0),verbose = 0)
+  deep_svdd <- import("pyod.models.deep_svdd")$DeepSVDD(random_state = as.integer(0),verbose = 0)
   deep_svdd$fit(x)
-  if (inverted){
-    return(!as.logical(deep_svdd$labels_))
-  }
-  return(as.logical(deep_svdd$labels_))
-  #return(1:nrow(x) %in% rev(order(deep_svdd$decision_scores_))[1:prop])
-  # return(abScale(deep_svdd$decision_scores_) > 0.5)
+  
+  return(deep_svdd$decision_scores_)
+}
+
+autoEnc <- function(x,prop,...){
+  autoenc <- import("pyod.models.auto_encoder")$AutoEncoder(random_state = as.integer(0),
+                                                            hidden_neurons = as.integer(c(1,64,32,32,64,1)),
+                                                            verbose = 0)
+  autoenc$fit(x)
+  
+  return(autoenc$decision_scores_)
 }
 
 deepSvddPu <- function(x,a,b,prop,...){
@@ -228,3 +228,35 @@ deepSvddPu <- function(x,a,b,prop,...){
   #return(1:nrow(x) %in% rev(order(deep_svdd$decision_scores_))[1:prop])
   return(B)
 }
+
+
+
+prenet <- function(X_train,y_train,X_test,...){
+  oldwd <- getwd()
+  setwd("semi/prenet/")
+  run <- import("prenet_predict")$prenet_predict
+  setwd(oldwd)
+  
+  run(X_train,X_test,y_train,"placeholder",ceiling(sum(y_train)/2),
+      batch_size = as.integer(10))[[1]]
+}
+
+overlap <- function(X_train,y_train,X_test,...){
+  oldwd <- getwd()
+  setwd("semi/Overlap-master/")
+  run <- import("run")$run_ADSD
+  setwd(oldwd)
+  
+  ratio <- mean(y_train)
+  
+  run(as.matrix(X_train),as.matrix(y_train),
+      X_test,seed = as.integer(0),batch_size = as.integer(10),
+      ratio = mean(y_train))
+}
+
+# puma <- function(X_train,y_train,X_test,...){
+#   oldwd <- getwd()
+#   setwd("semi/PU-MIL-AD-main/")
+#   run <- import("run_puma")$run
+#   setwd(oldwd)
+# }
